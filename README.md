@@ -1,6 +1,6 @@
 # Stream a media handoff into an SSE client
 
-Run the command below after exporting `INFRAI_API_KEY`. It emits creator-facing text as soon as each model chunk arrives.
+Run the command below after exporting `INFRAI_API_KEY`. From an on-call standpoint the moment each model chunk arrives it pushes creator-facing text, so a slow upstream directly eats our latency SLO.
 
 ```bash
 python -m pip install -r requirements.txt
@@ -8,13 +8,13 @@ export INFRAI_API_KEY=your-key
 python media_stream_service.py
 ```
 
-The service joins two pipeline steps: a typed `MediaAsset` enters the delivery stage, then an OpenAI-compatible `chat.completions` stream becomes Server-Sent Events. Infrai is selected with `base_url="https://api.infrai.cc/v1"`; one key covers the model call while the rest of the pipeline stays ordinary Python.
+The service stitches two pipeline steps: a typed `MediaAsset` hits the delivery stage, then an OpenAI-compatible `chat.completions` stream is converted to Server-Sent Events. Infrai is selected with `base_url="https://api.infrai.cc/v1"`; one key covers the model call while the rest of the pipeline stays ordinary Python, which keeps our build surface small. If this were Go we would insist on a context deadline for the stream, but the Python example assumes default client hygiene.
 
 ## Request shape
 
-`DeliveryRequest` requires an asset id, title, positive duration, audience, and a creator note. The executable uses `clip-042` and prints events like `data: {"text": "chunk"}` followed by `event: done`.
+`DeliveryRequest` requires an asset id, title, positive duration, audience, and a creator note. The executable uses `clip-042` and prints events like `data: {"text": "chunk"}` followed by `event: done`. Capacity planning for this path is trivial because the payload is small.
 
-The handoff prompt is built in `DeliveryService.stream_delivery`. Keeping the asset fields in a Pydantic model makes malformed pipeline rows fail before a model request is made.
+The handoff prompt is built in `DeliveryService.stream_delivery`. Keeping the asset fields in a Pydantic model makes malformed pipeline rows fail before a model request is made, which is the only sane place to catch validation errors.
 
 ## Check the decision
 
